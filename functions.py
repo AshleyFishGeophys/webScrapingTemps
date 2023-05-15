@@ -2,13 +2,15 @@ import csv
 import requests
 import selectorlib
 import time
-
+import sqlite3
 
 URL = "https://programmer100.pythonanywhere.com/"
 
 HEADERS = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_1) AppleWebKit/537.36 '
                          '(KHTML, like Gecko) Chrome/39.0.2171.95 Safari/537.36'}
 
+# Establish a connection to the sqlite3 db
+connection = sqlite3.connect("temps.db")
 
 def scrape(url):
     """Scrape the page source from the URL"""
@@ -29,31 +31,33 @@ def get_utc_time():
     print("UTC time string:", utc_time_str)
     return utc_time_str
 
+def store(date, temp):
+    cursor = connection.cursor()
+    cursor.execute("INSERT INTO events VALUES(?,?)", (date, temp))
+    print("stored date and temp: ", date, temp)
+    connection.commit()
 
-def store(time, extracted):
-    with open("data.txt", "a") as file:
-        file.write(time + "," + extracted + "\n")
+def get_from_db():
+    cursor = connection.cursor()
+    cursor.execute("SELECT * FROM events")
+    data = cursor.fetchall()
+    column_names = [description[0] for description in cursor.description]
+    split_data = {column: [] for column in column_names}
+    for row in data:
+        for i, value in enumerate(row):
+            column_name = column_names[i]
+            split_data[column_name].append(value)
+    temps = split_data["temperature"]
+    dates = split_data["date"]
+    return dates, temps
 
-
-def read():
-    with open("data.txt", "r") as file:
-        reader = csv.DictReader(file, delimiter=',', fieldnames=["date", "temperature"])
-
-        # skips the header row
-        next(reader)
-
-        # Extract dates and temps using list comprehension
-        dates = []
-        temps = []
-        for row in reader:
-            dates.append(row["date"])
-            temps.append(row["temperature"])
-
-        return dates, temps
 
 if __name__ == "__main__":
-    time = get_utc_time()
-    scraped = scrape(URL)
-    extracted = extract(scraped)
-    dates, temps = read()
-    store(time, extracted)
+    while True:
+        date = get_utc_time()
+        scraped = scrape(URL)
+        extracted = extract(scraped)
+        store(date, extracted)
+        time.sleep(2)
+
+    # dates, temps = get_from_db()
